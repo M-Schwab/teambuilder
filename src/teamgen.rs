@@ -22,12 +22,24 @@ impl Player {
 
         let attending = player_fields.next().unwrap() == "y";
 
+        let fixed_team = if let Some(s) = player_fields.next() {
+            if s == "A" {
+                Some(true)
+            } else if s == "B" {
+                Some(false)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
+
         if attending {
             Some(Player {
                 name,
                 rating,
                 gender,
-                fixed_team: None
+                fixed_team,
             })
         } else {
             None
