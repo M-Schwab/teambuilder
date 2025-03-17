@@ -31,10 +31,17 @@ pub fn App() -> impl IntoView {
 
     let team_a_color = RwSignal::new(Color::from(Srgb::new(255.0, 123.0, 0.0)));
     let team_b_color = RwSignal::new(Color::from(Srgb::new(0.0, 123.0, 255.0)));
+    let team_delta = RwSignal::new(1.0);
 
     let update_player_sheet_url = move |ev| {
         let v = event_target_value(&ev);
         set_player_sheet_url.set(v);
+    };
+
+    let update_max_team_delta = move |ev| {
+        let v = event_target_value(&ev);
+        let number = v.parse().unwrap();
+        team_delta.set(number);
     };
 
     let players_event = move |ev: SubmitEvent| {
@@ -69,7 +76,7 @@ pub fn App() -> impl IntoView {
         ev.prevent_default();
         spawn_local( async move {
             let players = players_sig.get();
-            let (a, b) = get_even_teams(&players, 1.0);
+            let (a, b) = get_even_teams(&players, team_delta.get());
 
             set_team_a.set(a);
             set_team_b.set(b);
@@ -123,6 +130,13 @@ pub fn App() -> impl IntoView {
                         <ColorPicker value=team_b_color/>
                     </ConfigProvider>
                     <form class="row" on:submit=team_gen_event>
+                        <label for="team-delta-input">Max Team Strength Delta:</label>
+                        <input
+                            id="team-delta-input"
+                            type="number"
+                            value="1.0"
+                            on:input=update_max_team_delta
+                        />
                         <button type="submit">Generate Teams</button>
                     </form>
                     <div class="row">
