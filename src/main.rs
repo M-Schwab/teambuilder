@@ -1,5 +1,6 @@
 mod app;
 mod teamgen;
+mod components;
 
 use app::*;
 use leptos::prelude::*;
