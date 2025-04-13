@@ -146,7 +146,8 @@ pub fn TeamGenerator(players: RwSignal<Vec<Player>>) -> impl IntoView {
             <div class="row">
             <table id="generated-teams">
                 <tr>
-                    <th class="teamgen-h"> Team A </th><th class="teamgen-h"> Team B </th>
+                    <th class="teamgen-h" contenteditable="true"> Team A </th>
+                    <th class="teamgen-h" contenteditable="true"> Team B </th>
                 </tr>
                 { move || team_a.get().into_iter()
                     .zip(team_b.get())
