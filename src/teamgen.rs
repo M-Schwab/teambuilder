@@ -1,6 +1,9 @@
+use std::collections::BTreeMap;
+
 use serde::{Serialize, Deserialize};
 use rand::thread_rng;
 use rand::seq::SliceRandom;
+
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct Player {
@@ -8,6 +11,7 @@ pub struct Player {
     pub rating: f32,
     pub gender: bool,
     pub fixed_team: Option<bool>,
+    pub position: Option<Vec<String>>,
 }
 
 impl Player {
@@ -34,12 +38,29 @@ impl Player {
             None
         };
 
+        let position = if let Some(s) = player_fields.next() {
+            let s = s.trim();
+            if s.is_empty() {
+                None
+            } else {
+                Some(
+                    s.split('/')
+                        .into_iter()
+                        .map(|s| s.trim().to_lowercase())
+                        .collect()
+                )
+            }
+        } else {
+            None
+        };
+
         if attending {
             Some(Player {
                 name,
                 rating,
                 gender,
                 fixed_team,
+                position,
             })
         } else {
             None
@@ -47,13 +68,28 @@ impl Player {
     }
 }
 
-pub fn get_even_teams(players: &[Player], max_delta: f32)  -> (Vec<Player>, Vec<Player>) {
-    for _ in 0..100_000 {
+fn rating(team: &Vec<Player>) -> f32 {
+    team.iter().map(|p| p.rating).sum()
+}
+
+fn min_pos_met(team: &Vec<Player>, min_positions: &BTreeMap<String, usize>) -> bool {
+    min_positions.iter()
+        .all(|(pos, req)| {
+            team.iter().filter(|p| match &p.position {
+                Some(v) => v.iter().any(|p_pos| p_pos == pos),
+                None => false,
+            })
+            .count() >= *req
+        })
+}
+
+pub fn get_even_teams(players: &[Player], max_delta: f32, min_positions: &BTreeMap<String, usize>)  -> (Vec<Player>, Vec<Player>) {
+    for _ in 0..500_000 {
         let (a, b) = random_team(players);
-        let a_rating: f32 = a.iter().map(|p| p.rating).sum();
-        let b_rating: f32 = b.iter().map(|p| p.rating).sum();
-        if (a_rating - b_rating).abs() < max_delta {
-            return (a, b)
+        if (rating(&a) - rating(&b)).abs() < max_delta {
+            if min_pos_met(&a, min_positions) && min_pos_met(&b, min_positions) {
+                return (a, b)
+            }
         }
     }
     panic!("Couldn't create a")

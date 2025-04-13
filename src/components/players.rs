@@ -1,6 +1,7 @@
 use leptos::task::spawn_local;
 use leptos::{ev::SubmitEvent, prelude::*};
 use gloo_net::http::Request;
+use polars::prelude::*;
 
 use crate::teamgen::Player;
 
@@ -29,7 +30,6 @@ pub fn Players(players: RwSignal<Vec<Player>>) -> impl IntoView {
                 .await.unwrap();
 
             let players_csv = csv_resp.text().await.unwrap();
-
             let mut lines = players_csv.split("\n");
 
             while let Some(l) = lines.next() {
@@ -54,7 +54,7 @@ pub fn Players(players: RwSignal<Vec<Player>>) -> impl IntoView {
             <h3>" Participating Players: ("{ move || players.get().len() }")"</h3>
             <table id="player-listing">
                 <tr>
-                    <th> Name </th><th> Rating </th><th> Gender </th><th> Team Lock </th>
+                    <th> Name </th><th> Rating </th><th> Gender </th><th> Team Lock </th><th> Position </th>
                 </tr>
                 { move || players.get().into_iter()
                     .map(|p| view!{ <tr>
@@ -72,6 +72,10 @@ pub fn Players(players: RwSignal<Vec<Player>>) -> impl IntoView {
                                 ""
                             }
                         } }</td>
+                        <td>{ move || match &p.position {
+                            Some(arr) => serde_json::to_string(arr).unwrap(),
+                            None => "".to_string(),
+                        }}</td>
                     </tr> })
                     .collect_view() }
             </table>
