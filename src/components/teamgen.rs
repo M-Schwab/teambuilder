@@ -2,11 +2,59 @@ use std::collections::BTreeMap;
 
 use leptos::task::spawn_local;
 use leptos::{ev::SubmitEvent, prelude::*};
+use serde::{Serialize, Deserialize, de::DeserializeOwned};
 use thaw::{ColorPicker, ConfigProvider};
 use thaw::Color;
 use palette::Srgb;
 
 use crate::teamgen::{Player, get_even_teams};
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+struct RGB {
+    red: f32,
+    green: f32,
+    blue: f32,
+}
+
+impl RGB {
+    fn srgb(self) -> Srgb {
+        Srgb::new(self.red, self.green, self.blue)
+    }
+
+    fn from_color(v: Color) -> Self {
+        match v {
+            Color::RGB(rgb) => {
+                RGB {
+                    red: rgb.red,
+                    green: rgb.green,
+                    blue: rgb.blue,
+                }
+            },
+            Color::HSV(hsv) => todo!(),
+            Color::HSL(hsl) => todo!(),
+        }
+    }
+
+    fn get_text_color(&self) -> &'static str {
+        // I'm storing rgb between 0 and 1 b/c thaw, so multiply by 255 at the end.
+        let brightness = (self.red * 299. + self.green * 587. + self.blue * 114.) * 255.0 / 1000.;
+        if brightness > 128. {
+            "black"
+        } else {
+            "white"
+        }
+    }
+}
+
+
+/// Generates a rw signal that persists changes to local storage, and will load that as the default on page refresh.
+macro_rules! local_storage_signal {
+    ($sig:ident, $default_ident:ident, $default:expr) => {
+        let $default_ident = from_local_storage(stringify!($sig), $default);
+        let $sig = RwSignal::new($default_ident);
+        Effect::new(move || {set_local_storage(stringify!($sig), $sig.get());})
+    };
+}
 
 fn get_color_code(c: Color) -> String {
     let c: Srgb<u8> = match c {
@@ -20,6 +68,34 @@ fn get_color_code(c: Color) -> String {
     )
 }
 
+fn from_local_storage<T>(key: &str, default: T) -> T where T: DeserializeOwned {
+    window()
+        .local_storage() 
+        .ok() 
+        .flatten() 
+        .and_then(|storage| { 
+            storage.get_item(key).ok().flatten().and_then( 
+                |value| serde_json::from_str::<T>(&value).ok(), 
+            ) 
+        }) 
+        .unwrap_or(default)
+}
+
+fn set_local_storage<T>(key: &str, value: T) where T: Serialize {
+    window()
+        .local_storage()
+        .ok()
+        .flatten()
+        .unwrap()
+        .set_item(key, &serde_json::to_string(&value).unwrap())
+        .unwrap();
+}
+
+fn set_local_storage_color(key: &str, value: Color) {
+    let value = RGB::from_color(value);
+    set_local_storage(key, value);
+}
+
 #[component]
 pub fn TeamGenerator(players: RwSignal<Vec<Player>>) -> impl IntoView {
 
@@ -27,20 +103,26 @@ pub fn TeamGenerator(players: RwSignal<Vec<Player>>) -> impl IntoView {
     let team_a = RwSignal::new(vec![]);
     let team_b = RwSignal::new(vec![]);
 
-    let team_a_color = RwSignal::new(Color::from(Srgb::new(255.0, 123.0, 0.0)));
-    let team_b_color = RwSignal::new(Color::from(Srgb::new(0.0, 123.0, 255.0)));
-    let team_delta = RwSignal::new(1.0);
+    let team_a_color_default = from_local_storage("team_a_color", RGB{red: 255.0, green: 123.0, blue: 0.0});
+    let team_a_color = RwSignal::new(Color::from(team_a_color_default.clone().srgb()));
+    Effect::new(move || {set_local_storage_color("team_a_color", team_a_color.get());});
 
-    let min_defense: RwSignal<usize> = RwSignal::new(1);
-    let min_forward = RwSignal::new(1);
-    let min_gk = RwSignal::new(1);
-    let min_midfield = RwSignal::new(1);
+    let team_b_color_default = from_local_storage("team_b_color", RGB{red: 0.0, green: 123.0, blue: 255.0});
+    let team_b_color = RwSignal::new(Color::from(team_b_color_default.clone().srgb()));
+    Effect::new(move || {set_local_storage_color("team_b_color", team_b_color.get());});
+    
+    local_storage_signal!(team_delta, team_delta_default, 1.0);
+    local_storage_signal!(min_defense, min_defense_default, 1);
+    local_storage_signal!(min_forward, min_forward_default, 1);
+    local_storage_signal!(min_gk, min_gk_default, 1);
+    local_storage_signal!(min_midfield, min_midfield_default, 1);
 
     let update_max_team_delta = move |ev| {
         let v = event_target_value(&ev);
         let number = v.parse().unwrap();
-        team_delta.set(number);
+        team_delta.set(number); 
     };
+    
 
     let update_min_defense = move |ev| {
         let v = event_target_value(&ev);
@@ -77,7 +159,10 @@ pub fn TeamGenerator(players: RwSignal<Vec<Player>>) -> impl IntoView {
             pos.insert("mid".to_string(), min_midfield.get());
             pos.insert("fw".to_string(), min_forward.get());
             
-            let (a, b) = get_even_teams(&players, team_delta.get(), &pos);
+            let (mut a, mut b) = get_even_teams(&players, team_delta.get(), &pos);
+
+            a.sort_by(|x, y| x.name.cmp(&y.name));
+            b.sort_by(|x, y| x.name.cmp(&y.name));
             team_a.set(a);
             team_b.set(b);
         });
@@ -95,7 +180,7 @@ pub fn TeamGenerator(players: RwSignal<Vec<Player>>) -> impl IntoView {
                 <input
                     id="team-delta-input"
                     type="number"
-                    value="1.0"
+                    value=team_delta_default
                     on:input=update_max_team_delta
                     class="team-delta-input"
                 />
@@ -105,7 +190,7 @@ pub fn TeamGenerator(players: RwSignal<Vec<Player>>) -> impl IntoView {
                 <input
                     id="min-fwd-input"
                     type="number"
-                    value="1"
+                    value=min_forward_default
                     on:input=update_min_forward
                     class="team-delta-input"
                 />
@@ -115,7 +200,7 @@ pub fn TeamGenerator(players: RwSignal<Vec<Player>>) -> impl IntoView {
                 <input
                     id="min-mid-input"
                     type="number"
-                    value="0"
+                    value=min_midfield_default
                     on:input=update_min_midfield
                     class="team-delta-input"
                 />
@@ -125,7 +210,7 @@ pub fn TeamGenerator(players: RwSignal<Vec<Player>>) -> impl IntoView {
                 <input
                     id="min-d-input"
                     type="number"
-                    value="2"
+                    value=min_defense_default
                     on:input=update_min_defense
                     class="team-delta-input"
                 />
@@ -135,7 +220,7 @@ pub fn TeamGenerator(players: RwSignal<Vec<Player>>) -> impl IntoView {
                 <input
                     id="min-gk-input"
                     type="number"
-                    value="1"
+                    value=min_gk_default
                     on:input=update_min_gk
                     class="team-delta-input"
                 />
@@ -153,8 +238,14 @@ pub fn TeamGenerator(players: RwSignal<Vec<Player>>) -> impl IntoView {
                     .zip(team_b.get())
                     .enumerate()
                     .map(|(i, (a, b))| view!{ <tr>
-                        <td contenteditable="true" style:background-color=move || get_color_code(team_a_color.get())>{i+1}". "{a.name}</td>
-                        <td contenteditable="true" style:background-color=move || get_color_code(team_b_color.get())>{i+1}". "{b.name}</td>
+                        <td contenteditable="true" 
+                            style:background-color=move || get_color_code(team_a_color.get())
+                            style:color=move || RGB::from_color(team_a_color.get()).get_text_color()
+                        >{i+1}". "{a.name}</td>
+                        <td contenteditable="true" 
+                            style:background-color=move || get_color_code(team_b_color.get())
+                            style:color=move || RGB::from_color(team_b_color.get()).get_text_color()
+                        >{i+1}". "{b.name}</td>
                     </tr> })
                     .collect_view() }
                 <tr>
