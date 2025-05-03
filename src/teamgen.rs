@@ -75,24 +75,34 @@ fn rating(team: &Vec<Player>) -> f32 {
 fn min_pos_met(team: &Vec<Player>, min_positions: &BTreeMap<String, usize>) -> bool {
     min_positions.iter()
         .all(|(pos, req)| {
-            team.iter().filter(|p| match &p.position {
+            let gk_ok = if pos == "gk" {
+                !team.iter().any(|p| match &p.position {
+                    Some(v) => v.iter().any(|p_pos| p_pos == pos) && p.name.ends_with("(1st half)"),
+                    None => false
+                })
+            } else {
+                true
+            };
+            let pos_count = team.iter().filter(|p| match &p.position {
                 Some(v) => v.iter().any(|p_pos| p_pos == pos),
                 None => false,
             })
-            .count() >= *req
+            .count();
+
+            pos_count >= *req && gk_ok
         })
 }
 
-pub fn get_even_teams(players: &[Player], max_delta: f32, min_positions: &BTreeMap<String, usize>)  -> (Vec<Player>, Vec<Player>) {
-    for _ in 0..500_000 {
+pub fn get_even_teams(players: &[Player], max_delta: f32, min_positions: &BTreeMap<String, usize>)  -> Result<(Vec<Player>, Vec<Player>), String> {
+    for _ in 0..50_000 {
         let (a, b) = random_team(players);
         if (rating(&a) - rating(&b)).abs() < max_delta {
             if min_pos_met(&a, min_positions) && min_pos_met(&b, min_positions) {
-                return (a, b)
+                return Ok((a, b))
             }
         }
     }
-    panic!("Couldn't create a")
+    Err(format!("Unable to generate even teams.  You may need to loosen the requirements for each team."))
 }
 
 

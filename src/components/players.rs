@@ -1,7 +1,6 @@
 use leptos::task::spawn_local;
 use leptos::{ev::SubmitEvent, prelude::*};
 use gloo_net::http::Request;
-use polars::prelude::*;
 
 use crate::teamgen::Player;
 

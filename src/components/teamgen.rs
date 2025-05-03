@@ -1,51 +1,13 @@
 use std::collections::BTreeMap;
 
-use leptos::task::spawn_local;
 use leptos::{ev::SubmitEvent, prelude::*};
-use serde::{Serialize, Deserialize, de::DeserializeOwned};
-use thaw::{ColorPicker, ConfigProvider};
+use thaw::ColorPicker;
+use thaw::{Toast, ToastBody, ToastTitle, ToasterInjection};
 use thaw::Color;
 use palette::Srgb;
 
 use crate::teamgen::{Player, get_even_teams};
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-struct RGB {
-    red: f32,
-    green: f32,
-    blue: f32,
-}
-
-impl RGB {
-    fn srgb(self) -> Srgb {
-        Srgb::new(self.red, self.green, self.blue)
-    }
-
-    fn from_color(v: Color) -> Self {
-        match v {
-            Color::RGB(rgb) => {
-                RGB {
-                    red: rgb.red,
-                    green: rgb.green,
-                    blue: rgb.blue,
-                }
-            },
-            Color::HSV(hsv) => todo!(),
-            Color::HSL(hsl) => todo!(),
-        }
-    }
-
-    fn get_text_color(&self) -> &'static str {
-        // I'm storing rgb between 0 and 1 b/c thaw, so multiply by 255 at the end.
-        let brightness = (self.red * 299. + self.green * 587. + self.blue * 114.) * 255.0 / 1000.;
-        if brightness > 128. {
-            "black"
-        } else {
-            "white"
-        }
-    }
-}
-
+use crate::utils::*;
 
 /// Generates a rw signal that persists changes to local storage, and will load that as the default on page refresh.
 macro_rules! local_storage_signal {
@@ -59,7 +21,7 @@ macro_rules! local_storage_signal {
 fn get_color_code(c: Color) -> String {
     let c: Srgb<u8> = match c {
         Color::RGB(c) => c,
-        _ => panic!("AHHH"),
+        _ => panic!("AH"),
     }.into_format();
     format!("rgb({}, {}, {})", 
         c.red, 
@@ -68,36 +30,11 @@ fn get_color_code(c: Color) -> String {
     )
 }
 
-fn from_local_storage<T>(key: &str, default: T) -> T where T: DeserializeOwned {
-    window()
-        .local_storage() 
-        .ok() 
-        .flatten() 
-        .and_then(|storage| { 
-            storage.get_item(key).ok().flatten().and_then( 
-                |value| serde_json::from_str::<T>(&value).ok(), 
-            ) 
-        }) 
-        .unwrap_or(default)
-}
-
-fn set_local_storage<T>(key: &str, value: T) where T: Serialize {
-    window()
-        .local_storage()
-        .ok()
-        .flatten()
-        .unwrap()
-        .set_item(key, &serde_json::to_string(&value).unwrap())
-        .unwrap();
-}
-
-fn set_local_storage_color(key: &str, value: Color) {
-    let value = RGB::from_color(value);
-    set_local_storage(key, value);
-}
-
 #[component]
 pub fn TeamGenerator(players: RwSignal<Vec<Player>>) -> impl IntoView {
+
+    // Thaw requires this to generate toasts
+    let toaster = ToasterInjection::expect_context();
 
     // Team signals
     let team_a = RwSignal::new(vec![]);
@@ -150,30 +87,40 @@ pub fn TeamGenerator(players: RwSignal<Vec<Player>>) -> impl IntoView {
 
     let team_gen_event = move |ev: SubmitEvent| {
         ev.prevent_default();
-        spawn_local( async move {
-            let players = players.get();
-            let mut pos = BTreeMap::new();
+        let players = players.get();
+        let mut pos = BTreeMap::new();
 
-            pos.insert("gk".to_string(), min_gk.get());
-            pos.insert("df".to_string(), min_defense.get());
-            pos.insert("mid".to_string(), min_midfield.get());
-            pos.insert("fw".to_string(), min_forward.get());
-            
-            let (mut a, mut b) = get_even_teams(&players, team_delta.get(), &pos);
-
-            a.sort_by(|x, y| x.name.cmp(&y.name));
-            b.sort_by(|x, y| x.name.cmp(&y.name));
-            team_a.set(a);
-            team_b.set(b);
-        });
+        pos.insert("gk".to_string(), min_gk.get());
+        pos.insert("df".to_string(), min_defense.get());
+        pos.insert("mid".to_string(), min_midfield.get());
+        pos.insert("fw".to_string(), min_forward.get());
+        
+        match get_even_teams(&players, team_delta.get(), &pos) {
+            Ok((mut a, mut b)) => {
+                a.sort_by(|x, y| x.name.cmp(&y.name));
+                b.sort_by(|x, y| x.name.cmp(&y.name));
+                team_a.set(a);
+                team_b.set(b);
+            },
+            Err(e) => {
+                toaster.dispatch_toast(move || view! {
+                    <Toast>
+                        <ToastTitle>"Failed To Generate Equal Teams"</ToastTitle>
+                        <ToastBody>
+                            {e}
+                        </ToastBody>
+                    </Toast>
+                }, Default::default());
+            }
+        };
     };
 
     view! {
         <div id="teams">
-            <ConfigProvider>
+            // <ConfigProvider>
                 <ColorPicker value=team_a_color/>
                 <ColorPicker value=team_b_color/>
-            </ConfigProvider>
+            // </ConfigProvider>
             <form class="col" on:submit=team_gen_event>
                 <div class="row">
                 <label for="team-delta-input" class="team-delta-label">Max Team Strength Delta:</label>
