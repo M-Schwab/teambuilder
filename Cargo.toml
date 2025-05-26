@@ -29,6 +29,7 @@ gloo-net = "0.6"
 rand = { version = "0.8.5" }
 getrandom = { version = "0.2", features = ["js"]}
 polars = {version = "0.44", default_features=false, features=["csv"]}
+regex = "1"
 
 [workspace]
 members = ["src-tauri"]

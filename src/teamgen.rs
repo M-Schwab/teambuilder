@@ -123,11 +123,18 @@ fn min_pos_met(team: &Vec<&Player>, min_positions: &BTreeMap<String, usize>) -> 
 pub fn get_even_teams(players: &[Player], max_delta: f32, min_positions: &BTreeMap<String, usize>)  -> Result<(Vec<Player>, Vec<Player>), String> {
     for _ in 0..100_000 {
         let (a, b) = random_team(players);
-        if (rating(&a) - rating(&b)).abs() < max_delta {
+        // Check teams are close enough in skill
+        if ((rating(&a) - rating(&b)).abs() < max_delta) &&
             // The shared player doesn't count for meeting the minimum position counts.
-            if min_pos_met(&a.players, min_positions) && min_pos_met(&b.players, min_positions) {
-                return Ok((a.owned(1), b.owned(2)))
-            }
+            min_pos_met(&a.players, min_positions) &&
+            min_pos_met(&b.players, min_positions) &&
+            // Disallow GK as a shared player for now
+            (!a.half_player
+                .and_then(|p| p.position.as_ref())
+                .is_some_and(|pos| pos.iter().any(|p| p == "GK"))
+            )
+        {
+            return Ok((a.owned(1), b.owned(2)))
         }
     }
     Err(format!("Unable to generate even teams.  You may need to loosen the requirements for each team."))
